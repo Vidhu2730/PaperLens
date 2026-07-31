@@ -1,0 +1,69 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: paperlens-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      zotero:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://paperlens:paperlens@postgres:5432/paperlens
+      REDIS_URL: redis://redis:6379
+      ZOTERO_TRANSLATION_URL: http://zotero:1969
+      UV_SYSTEM_CERTS: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: paperlens-postgres
+    environment:
+      POSTGRES_DB: paperlens
+      POSTGRES_USER: paperlens
+      POSTGRES_PASSWORD: paperlens
+    ports:
+      - "5432:5432"
+    volumes:
+      - paperlens-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperlens -d paperlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: paperlens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - paperlens-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  zotero:
+    image: zotero/translation-server:latest
+    container_name: paperlens-zotero
+    environment:
+      # Local/dev container fix for corporate TLS interception. Without this,
+      # translation-server can fail fetching PubMed/publisher pages with
+      # "unable to get local issuer certificate".
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    ports:
+      - "1969:1969"
+
+volumes:
+  paperlens-postgres-data:
+  paperlens-redis-data:
